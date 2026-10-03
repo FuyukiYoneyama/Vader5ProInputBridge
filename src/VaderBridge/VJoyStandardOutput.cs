@@ -25,7 +25,7 @@ internal sealed class VJoyStandardOutput : IDisposable
     private readonly Dictionary<string, int> _values = new();
     private readonly Dictionary<int, bool> _buttons = new();
     private int _buttonCount, _povCount;
-    private bool _acquired;
+    private bool _acquired, _povWritten;
     internal uint Pov { get; private set; } = uint.MaxValue;
     internal Dictionary<string, int> AxisValues => new(_values);
     internal Dictionary<int, bool> ButtonValues => new(_buttons);
@@ -37,7 +37,10 @@ internal sealed class VJoyStandardOutput : IDisposable
         _config = config; _id = checked((uint)config.VJoyId); _log = log;
     }
 
-    internal bool Start()
+    // GetVJDStatus compares the full Windows PID; some SDK versions truncate GetOwnerPid.
+    internal bool HasOwnership() => _acquired && vJoyEnabled() && GetVJDStatus(_id) == 0;
+
+    internal bool Start(bool initialize = true)
     {
         if (_id is < 1 or > 16 || !vJoyEnabled()) { _log("通常入力用vJoyのID・有効状態を確認してください。"); return false; }
         int status = GetVJDStatus(_id), owner = GetOwnerPid(_id);
@@ -65,15 +68,18 @@ internal sealed class VJoyStandardOutput : IDisposable
         _acquired = true;
         try
         {
-            for (int b = 1; b <= Math.Min(255, _buttonCount); b++) Button(b, false, true);
-            foreach (var axis in _axes) Axis(axis.Key, axis.Key is "Slider1" or "Slider2" ? -1 : 0, true);
-            for (byte p = 1; p <= _povCount; p++)
-                if (!SetContPov(uint.MaxValue, _id, p)) throw new IOException($"Device {_id}の十字キー初期化結果を確認してください。");
-            Pov = uint.MaxValue;
+            if (initialize)
+            {
+                for (int b = 1; b <= Math.Min(255, _buttonCount); b++) Button(b, false, true);
+                foreach (var axis in _axes) Axis(axis.Key, axis.Key is "Slider1" or "Slider2" ? -1 : 0, true);
+                for (byte p = 1; p <= _povCount; p++)
+                    if (!SetContPov(uint.MaxValue, _id, p)) throw new IOException($"Device {_id}の十字キー初期化結果を確認してください。");
+                Pov = uint.MaxValue; _povWritten = true;
+            }
             _log($"Device {_id}を取得しました。7使用軸・20ボタン・十字キー。Rzは中央。ownerPid={GetOwnerPid(_id)}");
             return true;
         }
-        catch { Stop(); throw; }
+        catch { Stop(initialize); throw; }
     }
 
     internal void Write(VaderInput input)
@@ -109,9 +115,9 @@ internal sealed class VJoyStandardOutput : IDisposable
     }
     internal void WritePov(uint value, bool force = false)
     {
-        if (!force && Pov == value) return;
+        if (!force && _povWritten && Pov == value) return;
         if (!SetContPov(value, _id, 1)) throw new IOException($"Device {_id}の十字キー書込み結果を確認してください。");
-        Pov = value;
+        Pov = value; _povWritten = true;
     }
     internal void SelfTestAxes(double value)
     {
@@ -121,17 +127,34 @@ internal sealed class VJoyStandardOutput : IDisposable
     internal void SelfTestButton(byte number, bool down) { Button(number, down, true); _log($"standard self-test button {number}: down={down}"); }
     internal void SelfTestPov(uint value) { WritePov(value, true); _log($"standard self-test pov: value={value}"); }
 
-    private void Stop()
+    internal void ReleaseForRecovery() => Stop(neutralize: false);
+
+    private void Stop(bool neutralize = true)
     {
         if (!_acquired) return;
-        for (int b = 1; b <= Math.Min(255, _buttonCount); b++) _log($"standard stop button {b}: result={SetBtn(false, _id, checked((byte)b))}");
-        foreach (var axis in _axes)
+        var errors = new List<string>();
+        void Record(string operation, bool success)
         {
-            int neutral = axis.Key is "Slider1" or "Slider2" ? axis.Value.Min : (axis.Value.Min + axis.Value.Max) / 2;
-            _log($"standard stop axis {axis.Key}: value={neutral}, result={SetAxis(neutral, _id, axis.Value.Usage)}");
+            _log($"standard stop {operation}: result={success}");
+            if (!success) errors.Add(operation);
         }
-        for (byte p = 1; p <= _povCount; p++) _log($"standard stop pov {p}: result={SetContPov(uint.MaxValue, _id, p)}");
-        RelinquishVJD(_id); _acquired = false; _log($"standard device {_id} relinquish completed: status={GetVJDStatus(_id)}, ownerPid={GetOwnerPid(_id)}");
+        try
+        {
+            if (neutralize && HasOwnership())
+            {
+                for (int b = 1; b <= Math.Min(255, _buttonCount); b++)
+                    Record($"button {b}", SetBtn(false, _id, checked((byte)b)));
+                foreach (var axis in _axes)
+                {
+                    int neutral = axis.Key is "Slider1" or "Slider2" ? axis.Value.Min : (axis.Value.Min + axis.Value.Max) / 2;
+                    Record($"axis {axis.Key}: value={neutral}", SetAxis(neutral, _id, axis.Value.Usage));
+                }
+                for (byte p = 1; p <= _povCount; p++) Record($"pov {p}", SetContPov(uint.MaxValue, _id, p));
+            }
+        }
+        finally { try { RelinquishVJD(_id); } finally { _acquired = false; _povWritten = false; } }
+        _log($"standard device {_id} relinquish result: neutralize={neutralize}, status={GetVJDStatus(_id)}, ownerPid={GetOwnerPid(_id)}");
+        if (errors.Count > 0) throw new IOException($"Device {_id}の休止値書込み結果を確認してください: {string.Join(", ", errors)}");
     }
     public void Dispose() => Stop();
 

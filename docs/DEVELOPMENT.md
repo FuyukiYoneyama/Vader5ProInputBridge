@@ -41,7 +41,7 @@ dotnet build src/VaderHidProbe/VaderHidProbe.csproj --configuration Release --co
 
 配布先は`dist/VADERBridge-版番号.zip`。実行物の識別一覧は`apps/build-manifest.json`、ZIP内の一覧は`release-manifest.json`。版番号、コミット、SHA-256（ファイル内容の識別値）で対応付ける。識別一覧は相対パスを使用する。
 
-配布用ZIPは収録するファイルを明示し、MIT本文、第三者の著作権表示、利用ガイドを含める。PDB（ソース位置を含むデバッグ情報）は開発用の生成物として保管する。コンパイル時のソース位置は共通のパスへ変換する。
+配布用ZIPは収録するファイルを明示し、MIT本文、第三者の著作権表示、利用ガイドと参照する画面画像を含める。画像はZIP直下の`images/`へ保存し、ガイドの相対参照に合わせる。PDB（ソース位置を含むデバッグ情報）は開発用の生成物として保管する。コンパイル時のソース位置は共通のパスへ変換する。
 
 ## 公開内容の監査
 

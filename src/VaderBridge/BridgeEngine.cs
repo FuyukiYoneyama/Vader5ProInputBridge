@@ -21,11 +21,12 @@ internal sealed class BridgeEngine : IAsyncDisposable
     private HidConnection? _connection;
     private VJoyOutput? _output;
     private VJoyStandardOutput? _standardOutput;
-    private bool _desiredAcquire, _useWriteFile;
-    private long _received, _processed, _decoded, _written, _lastValid, _diagnosticUntil, _resumeNotBefore, _acquireRequestedAt;
+    private bool _desiredAcquire, _useWriteFile, _outputRecovery;
+    private long _received, _processed, _decoded, _written, _lastValid, _resumeNotBefore, _acquireRequestedAt;
+    private long _nextOutputOwnershipCheck;
     private int _queued, _generation;
     private string _state = "待機", _detail = "MI_01を開く、またはvJoy自己試験を選択してください";
-    private VaderInput? _latest;
+    private VaderInput? _latest, _lastUsableInput;
     private double _roll, _pitch;
     private readonly IntervalStatistics _intervals = new();
     private readonly VJoyOutput.TiltEstimator _tilt = new();
@@ -66,7 +67,7 @@ internal sealed class BridgeEngine : IAsyncDisposable
     private void State(string state, string detail)
     {
         lock (_sync) { if (_state == state && _detail == detail) return; _state = state; _detail = detail; }
-        _log.Write("state", new { state, detail, outputPolicy = state is "回復中" or "入力回復中" or "機器設定待ち" ? "hold-last" : "continue" });
+        _log.Write("state", new { state, detail, outputPolicy = state is "回復中" or "入力回復中" or "処理回復中" or "機器設定待ち" ? "hold-last" : "continue" });
     }
     internal async Task OpenAsync(bool useWriteFile)
     {
@@ -75,7 +76,7 @@ internal sealed class BridgeEngine : IAsyncDisposable
         {
             if (_cancel is not null) return;
             _useWriteFile = useWriteFile; _desiredAcquire = false;
-            _received = _processed = _decoded = _written = _lastValid = 0; _queued = 0; _latest = null; _tilt.Reset();
+            _received = _processed = _decoded = _written = _lastValid = 0; _queued = 0; _latest = _lastUsableInput = null; _tilt.Reset();
             Interlocked.Exchange(ref _resumeNotBefore, 0);
             Interlocked.Exchange(ref _acquireRequestedAt, 0);
             _yaw.ResumeClock();
@@ -101,7 +102,11 @@ internal sealed class BridgeEngine : IAsyncDisposable
         {
             lock (_sync)
             {
-                if (_output is not null || _standardOutput is not null) return;
+                if (_output is not null || _standardOutput is not null)
+                {
+                    if ((_output?.HasOwnership() ?? true) && (_standardOutput?.HasOwnership() ?? true)) return;
+                    RecoverOutputs("vJoyの取得状態が変わりました。最新入力を書き戻すため再取得します。");
+                }
                 if (!StartOutputs()) State("出力待ち", "有効なvJoy出力先の設定・所有状態を確認してください");
             }
         }
@@ -115,11 +120,19 @@ internal sealed class BridgeEngine : IAsyncDisposable
         VJoyOutput? output = _config.ExtendedEnabled ? new(_config, message => _log.Write("vjoy-api", new { message })) : null;
         VJoyStandardOutput? standard = _config.Standard.Enabled ? new(_config.Standard, message => _log.Write("vjoy-standard-api", new { message })) : null;
         bool published = false;
+        bool restore = _outputRecovery && _lastUsableInput is not null;
         try
         {
             if (output is null && standard is null) return false;
-            if ((output is not null && !output.Start()) || (standard is not null && !standard.Start())) return false;
+            if ((output is not null && !output.Start(initialize: !restore)) || (standard is not null && !standard.Start(initialize: !restore))) return false;
+            if (restore)
+            {
+                if (output is not null) WriteExtendedOutput(output, _lastUsableInput!);
+                standard?.Write(_lastUsableInput!);
+                _log.Write("vjoy-restored", new { policy = "restore-latest-input", standardDevice = _config.Standard.VJoyId });
+            }
             _output = output; _standardOutput = standard; published = true;
+            _outputRecovery = false; _nextOutputOwnershipCheck = 0;
             _log.Write("vjoy-start", new { device = output is null ? (int?)null : _config.VJoyId, extendedEnabled = _config.ExtendedEnabled,
                 standardDevice = standard is null ? (int?)null : _config.Standard.VJoyId, standardButtons = _config.Standard.Buttons });
             foreach (ProcessModule module in Process.GetCurrentProcess().Modules)
@@ -127,12 +140,32 @@ internal sealed class BridgeEngine : IAsyncDisposable
                     _log.Write("native-library-loaded", Session.FileIdentity(module.FileName));
             return true;
         }
-        finally { if (!published) { try { standard?.Dispose(); } finally { output?.Dispose(); } } }
+        finally
+        {
+            if (!published)
+            {
+                try { if (restore) standard?.ReleaseForRecovery(); else standard?.Dispose(); }
+                finally { if (restore) output?.ReleaseForRecovery(); else output?.Dispose(); }
+            }
+        }
     }
-    internal void Diagnostic()
+    private void WriteExtendedOutput(VJoyOutput output, VaderInput input)
     {
-        Interlocked.Exchange(ref _diagnosticUntil, Stopwatch.GetTimestamp() + 60 * Stopwatch.Frequency);
-        _log.Write("diagnostic-start", new { durationSeconds = 60 });
+        output.SetSampleTime(_lastValid); output.WriteButtonStates(input.Buttons); output.WriteGyro(input.Gyro);
+        output.WriteTiltDegrees(_roll, _pitch); output.WriteAccel(input.Accel); output.WriteYawDegrees(_yaw.Snapshot.AngleDeg);
+    }
+    // Called under _sync. Retain the device values while replacing the output connection.
+    private void RecoverOutputs(string reason)
+    {
+        _outputRecovery = true;
+        try { _standardOutput?.ReleaseForRecovery(); }
+        catch (Exception ex) { _log.Write("vjoy-recovery-release-error", new { path = "standard", error = ex.ToString() }); }
+        finally { _standardOutput = null; }
+        try { _output?.ReleaseForRecovery(); }
+        catch (Exception ex) { _log.Write("vjoy-recovery-release-error", new { path = "extended", error = ex.ToString() }); }
+        finally { _output = null; }
+        _log.Write("vjoy-recovery", new { reason, policy = "restore-latest-input" });
+        State("出力待ち", reason);
     }
     private async Task SuperviseAsync(ChannelWriter<Packet> writer, CancellationToken token)
     {
@@ -239,7 +272,21 @@ internal sealed class BridgeEngine : IAsyncDisposable
                             }
                         }
                         Interlocked.Increment(ref _queued);
-                        if (!writer.TryWrite(packet)) { _log.Write("queue-wait", new { sequence, capacity = 4096 }); await writer.WriteAsync(packet).ConfigureAwait(false); }
+                        try
+                        {
+                            if (!writer.TryWrite(packet))
+                            {
+                                _log.Write("queue-wait", new { sequence, capacity = 4096 });
+                                await writer.WriteAsync(packet, token).ConfigureAwait(false);
+                            }
+                        }
+                        catch
+                        {
+                            Interlocked.Decrement(ref _queued);
+                            if (_log.Enabled) _log.Write("queue-write-ended", new { sequence, normalStop = token.IsCancellationRequested,
+                                raw = Convert.ToHexString(packet.Data) }, packet.Timestamp);
+                            throw;
+                        }
                         if (timestamp >= nextStats)
                         {
                             _log.Write("receive-statistics", new { received = Interlocked.Read(ref _received), processed = Interlocked.Read(ref _processed), decoded = Interlocked.Read(ref _decoded), written = Interlocked.Read(ref _written), queued = Volatile.Read(ref _queued), interval = _intervals.Snapshot(), thread = Environment.CurrentManagedThreadId }, timestamp);
@@ -260,7 +307,8 @@ internal sealed class BridgeEngine : IAsyncDisposable
                     {
                         try { connection.Release(); } catch (Exception ex) { _log.Write("release-error", new { error = ex.ToString() }); }
                         lock (_sync) _connection = null;
-                        connection.Dispose();
+                        try { connection.Dispose(); }
+                        catch (Exception ex) { _log.Write("hid-close-error", new { error = ex.ToString() }); }
                     }
                 }
                 if (!token.IsCancellationRequested) await Task.Delay(1000, token).ConfigureAwait(false);
@@ -275,75 +323,97 @@ internal sealed class BridgeEngine : IAsyncDisposable
         int generation = 0; long previousTimestamp = 0; bool[] previous = new bool[20];
         await foreach (var packet in reader.ReadAllAsync().ConfigureAwait(false))
         {
-            Interlocked.Decrement(ref _queued); bool decoded = VaderReportDecoder.TryDecode(packet.Data, out VaderInput? input);
-            Interlocked.Increment(ref _processed);
-            // 制御応答と未知のレポートは常時保存し、入力の生データは診断期間に加える。
-            _log.Write("report-processed", new { sequence = packet.Sequence, generation = packet.Generation, decoded, length = packet.Data.Length, raw = !decoded || packet.Timestamp <= Interlocked.Read(ref _diagnosticUntil) ? Convert.ToHexString(packet.Data) : null }, packet.Timestamp);
-            if (!decoded || input is null) continue;
-            Interlocked.Increment(ref _decoded); Interlocked.Exchange(ref _lastValid, packet.Timestamp);
-            bool wrote = false, standardWrote = false; string? error = null, standardError = null;
-            bool biasBecameReady;
-            lock (_sync)
+            try
             {
-                _latest = input;
-                if (packet.Timestamp < Interlocked.Read(ref _resumeNotBefore))
+                Interlocked.Decrement(ref _queued); bool decoded = VaderReportDecoder.TryDecode(packet.Data, out VaderInput? input);
+                Interlocked.Increment(ref _processed);
+                if (_log.Enabled) _log.Write("report-processed", new { sequence = packet.Sequence, generation = packet.Generation, decoded,
+                    length = packet.Data.Length, raw = Convert.ToHexString(packet.Data) }, packet.Timestamp);
+                if (!decoded || input is null) continue;
+                Interlocked.Increment(ref _decoded); Interlocked.Exchange(ref _lastValid, packet.Timestamp);
+                bool wrote = false, standardWrote = false; string? error = null, standardError = null;
+                bool biasBecameReady;
+                lock (_sync)
                 {
-                    _log.Write("report-held", new { sequence = packet.Sequence, generation = packet.Generation,
-                        reason = "configuration-or-connection-recovery", policy = "hold-last" }, packet.Timestamp);
-                    continue;
-                }
-                bool gap = previousTimestamp != 0 && packet.Timestamp - previousTimestamp > _config.Yaw.MaxSampleGapSeconds * Stopwatch.Frequency;
-                bool resumed = generation != packet.Generation || gap; generation = packet.Generation;
-                if (gap) _log.Write("input-sample-gap", new { sequence = packet.Sequence, generation,
-                    gapSeconds = (packet.Timestamp - previousTimestamp) / (double)Stopwatch.Frequency,
-                    policy = "hold-angles-resume-clock" }, packet.Timestamp);
-                previousTimestamp = packet.Timestamp;
-                for (int i = 0; i < 20; i++) if (previous[i] != input.Buttons[i]) _log.Write("button", new { sequence = packet.Sequence, button = i, down = input.Buttons[i] }, packet.Timestamp);
-                previous = input.Buttons;
-                if (resumed) { _tilt.ResumeClock(); _yaw.ResumeClock(); }
-                bool biasWasReady = _yaw.Snapshot.BiasReady;
-                _yaw.Update(input.Gyro, input.Accel, input.Buttons[5], packet.Timestamp);
-                biasBecameReady = !biasWasReady && _yaw.Snapshot.BiasReady;
-                _tilt.Update(input.Gyro, input.Accel, _config.Tilt.CorrectionTimeConstantSeconds, packet.Timestamp);
-                _roll = _tilt.RollDegrees; _pitch = _tilt.PitchDegrees;
-                _openTrack.Update(_yaw.Snapshot, _pitch, _roll, resumed);
-                if (_output is not null)
-                {
-                    try
+                    _latest = input;
+                    if (packet.Timestamp < Interlocked.Read(ref _resumeNotBefore))
                     {
-                        if (resumed) _output.ResumeClock();
-                        _output.SetSampleTime(packet.Timestamp); _output.WriteButtonStates(input.Buttons); _output.WriteGyro(input.Gyro); _output.WriteTiltDegrees(_roll, _pitch);
-                        _output.WriteAccel(input.Accel); _output.WriteYawDegrees(_yaw.Snapshot.AngleDeg);
-                        wrote = true;
+                        _log.Write("report-held", new { sequence = packet.Sequence, generation = packet.Generation,
+                            reason = "configuration-or-connection-recovery", policy = "hold-last" }, packet.Timestamp);
+                        continue;
                     }
-                    catch (Exception ex) { error = ex.Message; _log.Write("vjoy-write-error", new { sequence = packet.Sequence, error }); }
+                    bool gap = previousTimestamp != 0 && packet.Timestamp - previousTimestamp > _config.Yaw.MaxSampleGapSeconds * Stopwatch.Frequency;
+                    bool resumed = generation != packet.Generation || gap; generation = packet.Generation;
+                    if (gap) _log.Write("input-sample-gap", new { sequence = packet.Sequence, generation,
+                        gapSeconds = (packet.Timestamp - previousTimestamp) / (double)Stopwatch.Frequency,
+                        policy = "hold-angles-resume-clock" }, packet.Timestamp);
+                    previousTimestamp = packet.Timestamp;
+                    for (int i = 0; i < 20; i++) if (previous[i] != input.Buttons[i]) _log.Write("button", new { sequence = packet.Sequence, button = i, down = input.Buttons[i] }, packet.Timestamp);
+                    previous = input.Buttons;
+                    if (resumed) { _tilt.ResumeClock(); _yaw.ResumeClock(); }
+                    bool biasWasReady = _yaw.Snapshot.BiasReady;
+                    _yaw.Update(input.Gyro, input.Accel, input.Buttons[5], packet.Timestamp);
+                    biasBecameReady = !biasWasReady && _yaw.Snapshot.BiasReady;
+                    _tilt.Update(input.Gyro, input.Accel, _config.Tilt.CorrectionTimeConstantSeconds, packet.Timestamp);
+                    _roll = _tilt.RollDegrees; _pitch = _tilt.PitchDegrees;
+                    _openTrack.Update(_yaw.Snapshot, _pitch, _roll, resumed);
+                    _lastUsableInput = input;
+                    long now = Stopwatch.GetTimestamp();
+                    if (now >= _nextOutputOwnershipCheck)
+                    {
+                        _nextOutputOwnershipCheck = now + Stopwatch.Frequency;
+                        if (!(_output?.HasOwnership() ?? true) || !(_standardOutput?.HasOwnership() ?? true))
+                            RecoverOutputs("vJoyの取得状態が変わりました。再取得を待っています。");
+                    }
+                    if (_output is not null)
+                    {
+                        try
+                        {
+                            if (resumed) _output.ResumeClock();
+                            WriteExtendedOutput(_output, input);
+                            wrote = true;
+                        }
+                        catch (Exception ex) { error = ex.Message; _log.Write("vjoy-write-error", new { sequence = packet.Sequence, error }); }
+                    }
+                    if (_standardOutput is not null)
+                    {
+                        try { _standardOutput.Write(input); standardWrote = true; }
+                        catch (Exception ex) { standardError = ex.Message; _log.Write("vjoy-standard-write-error", new { sequence = packet.Sequence, error = standardError }); }
+                    }
+                    if ((_output is not null || _standardOutput is not null) && (_output is null || wrote) && (_standardOutput is null || standardWrote))
+                        Interlocked.Increment(ref _written);
+                    if (error is not null || standardError is not null)
+                        RecoverOutputs(error ?? standardError!);
                 }
-                if (_standardOutput is not null)
+                if (_log.Enabled)
                 {
-                    try { _standardOutput.Write(input); standardWrote = true; }
-                    catch (Exception ex) { standardError = ex.Message; _log.Write("vjoy-standard-write-error", new { sequence = packet.Sequence, error = standardError }); }
+                    var view = Snapshot();
+                    if (biasBecameReady) _log.Write("yaw-bias-ready", new { sequence = packet.Sequence, axis = _config.Yaw.SensorAxis, invert = _config.Yaw.Invert,
+                        acquireElapsedSeconds = view.AcquireElapsedSeconds, startupTargetSeconds = 5, yaw = view.Yaw }, packet.Timestamp);
+                    if (view.Yaw.Recentered) _log.Write("yaw-recenter", new { sequence = packet.Sequence, yaw = view.Yaw,
+                        standardButton = _config.Standard.Buttons.TryGetValue("Guide", out int guide) ? guide : (int?)null,
+                        standardSuccess = standardWrote, openTrack = view.OpenTrack }, packet.Timestamp);
+                    if (view.Yaw.SkippedGapSeconds > 0) _log.Write("yaw-sample-gap", new { sequence = packet.Sequence, yaw = view.Yaw, policy = "hold-angle-resume-clock" }, packet.Timestamp);
+                    _log.Write("report-output", new { sequence = packet.Sequence, vjoyId = _config.VJoyId, enabled = view.ExtendedEnabled, active = view.ExtendedActive, success = wrote, error, axes = view.Output, buttons = view.OutputButtons,
+                        standardInput = input.Standard, standardInputButtons = input.Buttons.Take(11).ToArray(), standardVjoyId = _config.Standard.VJoyId, standardSuccess = standardWrote, standardError,
+                        standardAxes = view.StandardOutput, standardButtons = view.StandardButtons, standardPov = view.StandardPov,
+                        yaw = view.Yaw, openTrack = view.OpenTrack, receivedTicks = packet.Timestamp, writeCompletedTicks = Stopwatch.GetTimestamp() }, packet.Timestamp);
+                    _log.Write("input-sample", new { sequence = packet.Sequence, standard = input.Standard, buttons = input.Buttons,
+                        gyro = input.Gyro, accel = input.Accel, roll = _roll, pitch = _pitch, yaw = view.Yaw }, packet.Timestamp);
                 }
-                if ((_output is not null || _standardOutput is not null) && (_output is null || wrote) && (_standardOutput is null || standardWrote))
-                    Interlocked.Increment(ref _written);
+                string? outputError = error ?? standardError;
+                lock (_sync)
+                    if (packet.Timestamp >= Interlocked.Read(ref _resumeNotBefore))
+                        State(_outputRecovery ? "出力待ち" : outputError is null ? "受信中" : "出力を再試行",
+                            outputError ?? (_outputRecovery ? "vJoyの再取得を待っています。" : "MI_01を順番に処理しています"));
             }
-            if (_log.Enabled)
+            catch (Exception ex)
             {
-                var view = Snapshot();
-                if (biasBecameReady) _log.Write("yaw-bias-ready", new { sequence = packet.Sequence, axis = _config.Yaw.SensorAxis, invert = _config.Yaw.Invert,
-                    acquireElapsedSeconds = view.AcquireElapsedSeconds, startupTargetSeconds = 5, yaw = view.Yaw }, packet.Timestamp);
-                if (view.Yaw.Recentered) _log.Write("yaw-recenter", new { sequence = packet.Sequence, yaw = view.Yaw,
-                    standardButton = _config.Standard.Buttons["Guide"], standardSuccess = standardWrote, openTrack = view.OpenTrack }, packet.Timestamp);
-                if (view.Yaw.SkippedGapSeconds > 0) _log.Write("yaw-sample-gap", new { sequence = packet.Sequence, yaw = view.Yaw, policy = "hold-angle-resume-clock" }, packet.Timestamp);
-                _log.Write("report-output", new { sequence = packet.Sequence, vjoyId = _config.VJoyId, enabled = view.ExtendedEnabled, active = view.ExtendedActive, success = wrote, error, axes = view.Output, buttons = view.OutputButtons,
-                    standardInput = input.Standard, standardInputButtons = input.Buttons.Take(11).ToArray(), standardVjoyId = _config.Standard.VJoyId, standardSuccess = standardWrote, standardError,
-                    standardAxes = view.StandardOutput, standardButtons = view.StandardButtons, standardPov = view.StandardPov,
-                    yaw = view.Yaw, openTrack = view.OpenTrack, receivedTicks = packet.Timestamp, writeCompletedTicks = Stopwatch.GetTimestamp() }, packet.Timestamp);
-                if (packet.Timestamp <= Interlocked.Read(ref _diagnosticUntil)) _log.Write("input-sample", new { sequence = packet.Sequence, standard = input.Standard, buttons = input.Buttons, gyro = input.Gyro, accel = input.Accel, roll = _roll, pitch = _pitch, yaw = view.Yaw }, packet.Timestamp);
+                lock (_sync) { _tilt.ResumeClock(); _yaw.ResumeClock(); _output?.ResumeClock(); }
+                previousTimestamp = 0; generation = 0;
+                State("処理回復中", "最終出力を保持し、次の入力から処理を再開します。");
+                _log.Write("processing-recovery", new { sequence = packet.Sequence, error = ex.ToString(), policy = "hold-last-resume-clock" }, packet.Timestamp);
             }
-            string? outputError = error ?? standardError;
-            lock (_sync)
-                if (packet.Timestamp >= Interlocked.Read(ref _resumeNotBefore))
-                    State(outputError is null ? "受信中" : "出力を再試行", outputError ?? "MI_01を順番に処理しています");
         }
         _log.Write("processing-drained", new { received = _received, processed = _processed, decoded = _decoded, written = _written, queued = _queued });
     }
@@ -355,18 +425,38 @@ internal sealed class BridgeEngine : IAsyncDisposable
     }
     private async Task StopCoreAsync()
     {
-        _cancel?.Cancel();
-        if (_supervisor is not null) await _supervisor.ConfigureAwait(false);
-        if (_processor is not null) await _processor.ConfigureAwait(false);
-        lock (_sync) { _openTrack.SetInputActive(false); StopOutputs(); _yaw.ResumeClock(); }
-        _cancel?.Dispose(); _cancel = null; _supervisor = _processor = null; _desiredAcquire = false;
-        Interlocked.Exchange(ref _acquireRequestedAt, 0);
-        State("停止", "出力先のボタン・十字キー解放、軸休止、機器取得の解除を完了しました");
+        var errors = new List<Exception>();
+        try
+        {
+            try { _cancel?.Cancel(); } catch (Exception ex) { errors.Add(ex); }
+            foreach (Task worker in new[] { _supervisor, _processor }.OfType<Task>())
+                try { await worker.ConfigureAwait(false); }
+                catch (Exception ex) { errors.Add(ex); }
+        }
+        finally
+        {
+            lock (_sync)
+            {
+                try { _openTrack.SetInputActive(false); } catch (Exception ex) { errors.Add(ex); }
+                try { StopOutputs(); } catch (Exception ex) { errors.Add(ex); }
+                _yaw.ResumeClock(); _outputRecovery = false;
+            }
+            _cancel?.Dispose(); _cancel = null; _packets = null; _supervisor = _processor = null; _desiredAcquire = false;
+            Interlocked.Exchange(ref _acquireRequestedAt, 0);
+        }
+        _log.Write("stop-result", new { success = errors.Count == 0, errors = errors.Select(ex => ex.ToString()).ToArray(), queued = _queued });
+        State("停止", errors.Count == 0 ? "停止処理と機器・出力先の資源解放を完了しました"
+            : "停止と資源解放を実行しました。各処理の結果を確認してください。");
+        if (errors.Count > 0) throw new AggregateException("停止時の処理結果を確認してください。", errors);
     }
     private void StopOutputs()
     {
-        try { _standardOutput?.Dispose(); }
-        finally { _standardOutput = null; try { _output?.Dispose(); } finally { _output = null; } }
+        var errors = new List<Exception>();
+        try { _standardOutput?.Dispose(); } catch (Exception ex) { errors.Add(ex); }
+        finally { _standardOutput = null; }
+        try { _output?.Dispose(); } catch (Exception ex) { errors.Add(ex); }
+        finally { _output = null; }
+        if (errors.Count > 0) throw new AggregateException("出力先の解放結果を確認してください。", errors);
     }
     internal async Task SelfTestAsync()
     {

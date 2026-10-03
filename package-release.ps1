@@ -23,6 +23,7 @@ New-Item -ItemType Directory -Path (Join-Path $taskPackage 'config') | Out-Null
 $taskConfig = Get-Content -LiteralPath (Join-Path $taskRoot 'config\bridge.json') -Raw | ConvertFrom-Json
 $taskConfig | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $taskPackage 'config\bridge.json') -Encoding utf8
 Copy-Item -LiteralPath (Join-Path $taskRoot 'docs\USAGE.md') -Destination (Join-Path $taskPackage '利用ガイド.md')
+Copy-Item -LiteralPath (Join-Path $taskRoot 'docs\images') -Destination (Join-Path $taskPackage 'images') -Recurse
 Copy-Item -LiteralPath (Join-Path $taskRoot 'CHANGELOG.md'),(Join-Path $taskRoot 'VERSION'),(Join-Path $taskRoot 'LICENSE'),(Join-Path $taskRoot 'THIRD_PARTY_NOTICES.md') -Destination $taskPackage
 Copy-Item -LiteralPath (Join-Path $taskRoot 'licenses') -Destination (Join-Path $taskPackage 'licenses') -Recurse
 $taskFiles = @(Get-ChildItem -LiteralPath $taskPackage -File -Recurse | ForEach-Object { [ordered]@{ path = [IO.Path]::GetRelativePath($taskPackage, $_.FullName); sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash } })

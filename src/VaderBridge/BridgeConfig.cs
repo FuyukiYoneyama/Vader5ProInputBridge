@@ -18,8 +18,11 @@ internal sealed class BridgeConfig
     {
         using JsonDocument document = JsonDocument.Parse(File.ReadAllText(path));
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        return JsonSerializer.Deserialize<BridgeConfig>(document.RootElement.GetRawText(), options)
+        var config = JsonSerializer.Deserialize<BridgeConfig>(document.RootElement.GetRawText(), options)
             ?? throw new InvalidDataException("bridge.json did not contain a configuration object.");
+        if (!float.IsFinite(config.Tilt.CorrectionTimeConstantSeconds) || config.Tilt.CorrectionTimeConstantSeconds <= 0)
+            throw new InvalidDataException("tilt.correctionTimeConstantSecondsには有限の正の値を設定してください。");
+        return config;
     }
 }
 

@@ -26,7 +26,6 @@ internal sealed class BridgeDashboardForm : Form
     private readonly Button _output = new() { Text = "3 vJoy出力開始", AutoSize = true };
     private readonly Button _stop = new() { Text = "停止・解除", AutoSize = true };
     private readonly Button _test = new() { Text = "vJoy自己試験", AutoSize = true };
-    private readonly Button _trace = new() { Text = "60秒診断記録", AutoSize = true };
     private readonly Label _status = new() { Dock = DockStyle.Fill, AutoEllipsis = true };
     private readonly Label _health = new() { Dock = DockStyle.Fill, AutoEllipsis = true };
     private readonly Label _openTrackStatus = new() { Dock = DockStyle.Fill, AutoEllipsis = true };
@@ -84,7 +83,6 @@ internal sealed class BridgeDashboardForm : Form
         _output.Click += async (_, _) => await Command(_engine.StartOutputAsync);
         _stop.Click += async (_, _) => await Command(_engine.StopAsync);
         _test.Click += async (_, _) => await Command(_engine.SelfTestAsync);
-        _trace.Click += async (_, _) => await Command(async () => { await _engine.SetLoggingEnabledAsync(true); _engine.Diagnostic(); });
         _resume.Click += async (_, _) => await StartAutomaticAsync();
         _pause.Click += async (_, _) => await PauseAsync();
         _logToggle.Click += async (_, _) => await ToggleLoggingAsync();
@@ -96,7 +94,7 @@ internal sealed class BridgeDashboardForm : Form
         {
             RefreshDisplay();
             var view = _engine.Snapshot();
-            if (_automatic && !_busy && !_closing && view.Running && !view.OutputActive && Environment.TickCount64 >= _nextOutputRetry)
+            if (_automatic && !_busy && !_closing && view.Running && Environment.TickCount64 >= _nextOutputRetry)
             {
                 _nextOutputRetry = Environment.TickCount64 + 2000;
                 await Command(_engine.StartOutputAsync);
@@ -195,7 +193,7 @@ internal sealed class BridgeDashboardForm : Form
         string status = $"{view.State}  受信:{view.Received}  処理:{view.Processed}  デコード:{view.Decoded}  出力:{view.Written}  処理待ち:{view.Queued}\n{view.Detail}";
         if (_status.Text != status) _status.Text = status;
         string health = _engine.Log.Enabled
-            ? $"ログON  ファイル記録:{_engine.Log.Written}件  保存待ち:{_engine.Log.Accepted - _engine.Log.Written}件  容量超過:{_engine.Log.Dropped}件  {_engine.Log.Error}\n{_engine.Log.Path}"
+            ? $"ログON  採取:{_engine.Log.Accepted}件  書出し:{_engine.Log.Written}件  保存待ち:{_engine.Log.Accepted - _engine.Log.Written}件  破棄:{_engine.Log.Dropped}件  {_engine.Log.Error}\n{_engine.Log.Path}"
             : $"ログOFF  診断が必要な時は「ログ採取開始」を押してください。\n{(_engine.Log.Path.Length > 0 ? "直前の記録: " + _engine.Log.Path : "")}";
         if (_health.Text != health) _health.Text = health;
         var ot = view.OpenTrack;
@@ -255,7 +253,7 @@ internal sealed class BridgeDashboardForm : Form
             phase = "await-acquire";
             message = "自動開始中\n取得要求を準備しています。初回は約2秒の静止測定を行います。";
         }
-        else if (view.State is "回復中" or "入力回復中" or "機器設定待ち")
+        else if (view.State is "回復中" or "入力回復中" or "処理回復中" or "機器設定待ち")
         {
             phase = "recovery-" + view.State;
             background = Color.LemonChiffon; foreground = Color.SaddleBrown;
@@ -263,6 +261,7 @@ internal sealed class BridgeDashboardForm : Form
             {
                 "機器設定待ち" => "機器設定の通信が落ち着くのを待っています。最終値を保持しています。",
                 "入力回復中" => "正常入力を待ちながら、取得を再試行しています。最終値を保持しています。",
+                "処理回復中" => "最終出力を保持し、次の入力から処理を再開します。",
                 _ => "パッドの接続を開き直しています。最終値を保持しています。"
             };
             message = $"{(view.Yaw.BiasReady ? "復帰中！" : "初期化中！ （パッドを動かさないでください）")}\n{reason}";
@@ -326,7 +325,7 @@ internal sealed class BridgeDashboardForm : Form
         {
             phase = "paused"; title = "一時停止"; message = "アイコンメニューの「再開」で取得と出力を開始できます。"; icon = _images.Waiting;
         }
-        else if (view.State is "回復中" or "入力回復中" or "機器設定待ち")
+        else if (view.State is "回復中" or "入力回復中" or "処理回復中" or "機器設定待ち")
         {
             phase = "recovery"; title = "再接続中";
             message = "接続と入力の回復を待っています。最後の出力値を保持しています。"; icon = _images.Waiting;

@@ -32,7 +32,10 @@ internal sealed class VJoyOutput : IDisposable
         _log = log;
     }
 
-    internal bool Start()
+    // GetVJDStatus compares the full Windows PID; some SDK versions truncate GetOwnerPid.
+    internal bool HasOwnership() => _acquired && vJoyEnabled() && GetVJDStatus(_deviceId) == 0;
+
+    internal bool Start(bool initialize = true)
     {
         if (!_config.ExtendedEnabled)
         {
@@ -128,26 +131,29 @@ internal sealed class VJoyOutput : IDisposable
         }
         _acquired = true;
 
-        foreach (int button in configuredButtons)
+        if (initialize)
         {
-            if (!SetBtn(false, _deviceId, checked((byte)button)))
+            foreach (int button in configuredButtons)
             {
-                _log($"Could not initialize vJoy button {button}; releasing device.");
-                Stop();
-                return false;
+                if (!SetBtn(false, _deviceId, checked((byte)button)))
+                {
+                    _log($"Could not initialize vJoy button {button}; releasing device.");
+                    Stop();
+                    return false;
+                }
+                _lastButtonValues[button] = false;
             }
-            _lastButtonValues[button] = false;
-        }
-        foreach (var axis in _enabledAxes)
-        {
-            int center = (int)Math.Round((axis.Value.Min + (double)axis.Value.Max) / 2);
-            if (!SetAxis(center, _deviceId, axis.Key))
+            foreach (var axis in _enabledAxes)
             {
-                _log("Could not center the configured vJoy axes; releasing device.");
-                Stop();
-                return false;
+                int center = (int)Math.Round((axis.Value.Min + (double)axis.Value.Max) / 2);
+                if (!SetAxis(center, _deviceId, axis.Key))
+                {
+                    _log("Could not center the configured vJoy axes; releasing device.");
+                    Stop();
+                    return false;
+                }
+                _lastAxisValues[axis.Key] = center;
             }
-            _lastAxisValues[axis.Key] = center;
         }
         foreach (AxisState axis in _axes.Values) axis.LastOutput = axis.Center;
         _tiltEstimator.Reset();
@@ -279,21 +285,35 @@ internal sealed class VJoyOutput : IDisposable
         _lastAxisValues[axis.Usage] = output;
     }
 
-    internal void Stop()
+    internal void ReleaseForRecovery() => Stop(neutralize: false);
+
+    internal void Stop(bool neutralize = true)
     {
         if (!_acquired) return;
-        for (int button = 1; button <= Math.Min(255, GetVJDButtonNumber(_deviceId)); button++)
-            _log($"stop button {button}: result={SetBtn(false, _deviceId, checked((byte)button))}");
-        foreach (var axis in _enabledAxes)
+        var errors = new List<string>();
+        void Record(string operation, bool success)
         {
-            int center = (int)Math.Round((axis.Value.Min + (double)axis.Value.Max) / 2);
-            _log($"stop axis 0x{axis.Key:X2}: value={center}, result={SetAxis(center, _deviceId, axis.Key)}");
+            _log($"stop {operation}: result={success}");
+            if (!success) errors.Add(operation);
         }
+        try
+        {
+            if (neutralize && HasOwnership())
+            {
+                for (int button = 1; button <= Math.Min(255, GetVJDButtonNumber(_deviceId)); button++)
+                    Record($"button {button}", SetBtn(false, _deviceId, checked((byte)button)));
+                foreach (var axis in _enabledAxes)
+                {
+                    int center = (int)Math.Round((axis.Value.Min + (double)axis.Value.Max) / 2);
+                    Record($"axis 0x{axis.Key:X2}: value={center}", SetAxis(center, _deviceId, axis.Key));
+                }
+            }
+        }
+        finally { try { RelinquishVJD(_deviceId); } finally { _acquired = false; } }
         foreach (AxisState axis in _axes.Values) axis.LastOutput = axis.Center;
         _buttonStates.Clear();
-        RelinquishVJD(_deviceId);
-        _acquired = false;
-        _log($"vJoy device {_deviceId} relinquish completed; status={StatusName(GetVJDStatus(_deviceId))}.");
+        _log($"vJoy device {_deviceId} relinquish result: neutralize={neutralize}, status={StatusName(GetVJDStatus(_deviceId))}.");
+        if (errors.Count > 0) throw new IOException($"Device {_deviceId}の休止値書込み結果を確認してください: {string.Join(", ", errors)}");
     }
 
     public void Dispose() => Stop();
