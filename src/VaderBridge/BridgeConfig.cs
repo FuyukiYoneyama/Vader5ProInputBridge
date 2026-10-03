@@ -3,7 +3,6 @@ using System.Text.Json;
 internal sealed class BridgeConfig
 {
     public RuntimeConfig Runtime { get; set; } = new();
-    public DeviceConfig Device { get; set; } = new();
     public int VJoyId { get; set; } = 2;
     public bool ExtendedEnabled { get; set; }
     public Dictionary<string, int> Buttons { get; set; } = new(StringComparer.OrdinalIgnoreCase);
@@ -43,12 +42,6 @@ internal sealed class StandardOutputConfig
 internal sealed class RuntimeConfig
 {
     public string VJoyLibraryPath { get; set; } = "";
-}
-
-internal sealed class DeviceConfig
-{
-    public string Vid { get; set; } = "0x37D7";
-    public string Pid { get; set; } = "0x2401";
 }
 
 internal sealed class GyroConfig

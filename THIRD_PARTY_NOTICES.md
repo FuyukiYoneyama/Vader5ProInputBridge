@@ -17,10 +17,12 @@ SDLの元実装と本実装を区別し、元の表示を参照ファイルの�
 
 | 名称 | 関係 | 配布・参照 |
 |---|---|---|
-| vJoy | インストール済みの`vJoyInterface.dll`を実行時に使用 | [vJoy](https://github.com/jshafer817/vJoy)。配布元のライセンスに従い、別途インストール |
+| vJoy | インストール済みの`vJoyInterface.dll`を実行時に使用 | 利用者向けの入手先は[BrunnerInnovation/vJoyのReleases](https://github.com/BrunnerInnovation/vJoy/releases)。配布元のライセンスに従い、別途インストール。設定画面例は2.2.2.0 |
 | OpenTrack | UDP（アプリ間でデータを送る通信方式）で姿勢角度を受信 | [OpenTrack](https://github.com/opentrack/opentrack)。別途インストール |
 | Windows API | HID、DInput、XInput、ウィンドウ操作 | Windows SDKの関数宣言とデータ配置に従うC#相互運用実装 |
 | Pillow | アイコン生成時に使用するPythonライブラリ | [Pillow](https://github.com/python-pillow/Pillow)。開発用として別途用意 |
+
+vJoyのAPI（プログラムから使う関数）と取得・解除処理の参照元は[BrunnerInnovation/vJoyのvJoyInterface.cpp](https://github.com/BrunnerInnovation/vJoy/blob/master/apps/common/vJoyInterface/vJoyInterface.cpp)。元プロジェクトは[jshafer817/vJoy](https://github.com/jshafer817/vJoy)で、利用者向けの配布先と実装の参照先を上記で区別している。
 
 OpenTrackへ送るデータの軸順序と形式は、[公式UDP受信処理](https://github.com/opentrack/opentrack/blob/master/tracker-udp/ftnoir_tracker_udp.cpp)を参照して実装している。
 

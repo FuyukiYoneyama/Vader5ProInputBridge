@@ -2,7 +2,7 @@
 
 ![アプリのアイコン](src/VaderBridge/Assets/VADERBridge.png)
 
-VADER 5 PROの入力をvJoy（仮想ゲームコントローラー）へ、姿勢角度をOpenTrackへ送るWindowsアプリです。初期対象はUSB接続のVADER 5 PRO。現在の版は**1.0.4**です。
+VADER 5 PROの入力をvJoy（仮想ゲームコントローラー）へ、姿勢角度をOpenTrackへ送るWindowsアプリです。初期対象はUSB接続のVADER 5 PRO。現在の版は**1.0.5**です。
 
 ## 想定される利用例
 
@@ -33,9 +33,11 @@ flowchart LR
 通常入力・追加ボタン、vJoy 1へ書き込む値、OpenTrackへ送る角度を固定表示します。
 
 <details>
-<summary>Bridgeの状態画面を表示</summary>
+<summary>Bridgeの状態画面を表示（1.0.3で撮影）</summary>
 
-![Bridgeの状態画面：通常入力・追加ボタン・vJoy 1への出力値・OpenTrackへの送信角度](docs/images/bridge-dashboard.jpg)
+![Bridge 1.0.3の状態画面：通常入力・追加ボタン・vJoy 1への出力値・OpenTrackへの送信角度](docs/images/bridge-dashboard.jpg)
+
+画面例は1.0.3で撮影したものです。使用する版はタイトルと画面内の版表示で確認します。
 
 </details>
 
@@ -45,7 +47,7 @@ flowchart LR
 |---|---|
 | PC | Windows x64（64ビット） |
 | VADER 5 Pro | USBでPCへ接続。初期対象はUSB接続 |
-| .NET 8 | **.NET Desktop Runtime（Windowsアプリの実行環境）8 / Windows x64**。[Microsoftのダウンロードページ](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)で「.NET Desktop Runtime」→「Windows」→「x64」を選ぶ |
+| .NET 10 | **.NET Desktop Runtime（Windowsアプリの実行環境）10 / Windows x64**。[Microsoftのダウンロードページ](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)で「.NET Desktop Runtime」→「Windows」→「x64」を選ぶ |
 | vJoy | 仮想ゲームコントローラーを作るドライバー。設定画面例は2.2.2.0。[配布元のReleases](https://github.com/BrunnerInnovation/vJoy/releases) |
 | OpenTrack | Bridgeから受けた姿勢角度をゲームの視点移動へつなぐアプリ。[配布元のReleases](https://github.com/opentrack/opentrack/releases) |
 
@@ -108,17 +110,19 @@ OpenTrackの入力を、Bridgeが送るUDP（アプリ間でデータを送る�
 
 ログの初期値はOFFです。
 
+（配布EXEにはAuthenticode（Windowsで発行元を確認するコード署名）を付けていません。）Windows SmartScreen（ダウンロードしたアプリの評判を確認する機能）が警告を表示する場合があります。[Microsoftの説明](https://learn.microsoft.com/en-us/windows/security/operating-system-security/virus-and-threat-protection/microsoft-defender-smartscreen/)を参照してください。配布ZIPの内容はReleaseに添付するSHA-256（ファイル内容の識別値）で照合できます。手順は[利用ガイド](docs/USAGE.md#配布物の確認)を参照してください。
+
 [利用ガイドと割当](docs/USAGE.md) · [変更履歴](CHANGELOG.md)
 
 ## ビルド
 
-.NET 8 SDK（ソースをビルドする開発キット）、Git、PowerShell 7を用意し、リポジトリ直下で実行します。
+.NET 10 SDK（ソースをビルドする開発キット）、Git、PowerShell 7を用意し、リポジトリ直下で実行します。
 
 ```powershell
 .\build-apps.ps1
 ```
 
-通常の起動先は`apps/VADERBridge/VADERBridge.exe`。診断用の読取りアプリも`apps/`へ生成します。vJoyは実行時にインストール済みのライブラリを読み込みます。
+通常の起動先は`apps/VADERBridge/VADERBridge.exe`。診断用の読取りアプリとVaderHidProbeも`apps/`へ生成します。vJoyは実行時にインストール済みのライブラリを読み込みます。
 
 [開発・公開手順](docs/DEVELOPMENT.md) · [構成と通信仕様](docs/ARCHITECTURE.md) · [貢献方法](CONTRIBUTING.md)
 
@@ -151,7 +155,7 @@ OpenTrackの入力を、Bridgeが送るUDP（アプリ間でデータを送る�
 
 拡張入力を取得する実験では、標準XInputの更新が停止する構成を確認しています。標準XInputと拡張入力の同時更新は、機器と取得方式ごとに別途評価します。
 
-1.0.4では入力処理の例外回復、vJoyの再取得、ログ記録と配布内容を修正しています。USB再接続の安定時間とYawのドリフトは、各版の実機確認で継続評価します。確認手順は[利用ガイド](docs/USAGE.md#版を更新した後の確認)にまとめています。
+1.0.4で入力処理の例外回復、vJoyの再取得、ログ記録と配布内容を修正し、1.0.5で.NET 10への移行と公開工程の更新を行っています。USB再接続の安定時間とYawのドリフトは、各版の実機確認で継続評価します。確認手順は[利用ガイド](docs/USAGE.md#版を更新した後の確認)にまとめています。
 
 ## ライセンスと出典
 

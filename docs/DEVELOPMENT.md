@@ -2,13 +2,13 @@
 
 ## 準備とビルド
 
-Windows x64、.NET 8 SDK、PowerShell 7、Gitを用意する。`global.json`はSDK 8.0.204を基準に、8.0の後続機能バンドへのロールフォワード（利用可能な後続SDKを選ぶ設定）を許可する。ソースのビルドは標準のSDK参照だけで行う。
+Windows x64、.NET 10 SDK、PowerShell 7、Gitを用意する。`global.json`はSDK 10.0.100を基準に、10.0の後続機能バンドへのロールフォワード（利用可能な後続SDKを選ぶ設定）を許可する。ソースのビルドは標準のSDK参照だけで行う。.NET 10はLTS（長期サポート版）で、サポート期限は2028年11月14日。[Microsoftのサポート方針](https://dotnet.microsoft.com/en-us/platform/support/policy)を参照する。
 
 ```powershell
 .\build-apps.ps1
 ```
 
-生成先は`apps/`。Bridge、XInput Reader、DInput Reader 1・2の4実行物を作る。HID（機器の入力・制御用インターフェース）の生入力を調べる専用ツールは、必要に応じて次でビルドする。
+生成先は`apps/`。Bridge、XInput Reader、DInput Reader 1・2、VaderHidProbeの5実行物を作る。VaderHidProbeはHID（機器の入力・制御用インターフェース）の生入力を調べる開発用ツールで、通常のビルドとCI（変更ごとの自動確認）の対象に含める。個別のビルドには次を使う。
 
 ```powershell
 dotnet build src/VaderHidProbe/VaderHidProbe.csproj --configuration Release --configfile NuGet.Config

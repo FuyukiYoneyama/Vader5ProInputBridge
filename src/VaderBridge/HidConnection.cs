@@ -9,6 +9,8 @@ using InputTools;
 
 internal sealed class HidConnection : IDisposable
 {
+    // Flydigiの全PIDを探索し、拡張HIDの形式で対象を選ぶ。
+    private const string VendorPathToken = "VID_37D7";
     internal sealed record Device(string Path, ushort UsagePage, ushort Usage, int InputLength, int OutputLength, int Error);
     internal Device Target { get; }
     internal FileStream Input { get; }
@@ -86,7 +88,7 @@ internal sealed class HidConnection : IDisposable
                     Marshal.WriteInt32(detail, IntPtr.Size == 8 ? 8 : 6);
                     if (!SetupDiGetDeviceInterfaceDetail(set, ref item, detail, required, out _, ref info)) continue;
                     string path = Marshal.PtrToStringUni(IntPtr.Add(detail, 4)) ?? "";
-                    if (!path.Contains("VID_37D7", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!path.Contains(VendorPathToken, StringComparison.OrdinalIgnoreCase)) continue;
                     using SafeFileHandle handle = CreateFile(path, 0, 3, IntPtr.Zero, 3, 0, IntPtr.Zero);
                     if (handle.IsInvalid) { devices.Add(new(path, 0, 0, 0, 0, Marshal.GetLastWin32Error())); continue; }
                     if (!HidD_GetPreparsedData(handle, out IntPtr data)) { devices.Add(new(path, 0, 0, 0, 0, Marshal.GetLastWin32Error())); continue; }

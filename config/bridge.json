@@ -2,11 +2,6 @@
   "runtime": {
     "vjoyLibraryPath": ""
   },
-  "device": {
-    "vid": "0x37D7",
-    "pid": "0x2401",
-    "connection": "usb"
-  },
   "vjoyId": 2,
   "extendedEnabled": false,
   "standard": {

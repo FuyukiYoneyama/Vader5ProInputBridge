@@ -5,11 +5,21 @@
 | 用意するもの | 内容・入手先 |
 |---|---|
 | PCとパッド | Windows x64（64ビット）と、USB接続のVADER 5 PRO |
-| .NET 8 | .NET Desktop Runtime（Windowsアプリの実行環境）8のWindows x64版。[Microsoftのダウンロードページ](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)で「.NET Desktop Runtime」→「Windows」→「x64」を選ぶ |
+| .NET 10 | .NET Desktop Runtime（Windowsアプリの実行環境）10のWindows x64版。[Microsoftのダウンロードページ](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)で「.NET Desktop Runtime」→「Windows」→「x64」を選ぶ |
 | vJoy（仮想ゲームコントローラー） | [配布元のReleases](https://github.com/BrunnerInnovation/vJoy/releases)。設定画面例は2.2.2.0 |
 | OpenTrack | 姿勢をゲームの視点移動へ使う場合に用意する。[配布元のReleases](https://github.com/opentrack/opentrack/releases) |
 
 配布用ZIPを使う場合は、この実行環境を用意する。インストーラーがPC再起動を案内した場合は、再起動後に設定を進める。
+
+### 配布物の確認
+
+（配布EXEにはAuthenticode（Windowsで発行元を確認するコード署名）を付けていない。）Windows SmartScreen（ダウンロードしたアプリの評判を確認する機能）が警告を表示する場合がある。[Microsoftの説明](https://learn.microsoft.com/en-us/windows/security/operating-system-security/virus-and-threat-protection/microsoft-defender-smartscreen/)を参照する。GitHubのReleaseからZIPと同名の`.sha256`を入手し、展開前にファイルのSHA-256（ファイル内容の識別値）を照合する。
+
+```powershell
+Get-FileHash .\VADERBridge-1.0.5.zip -Algorithm SHA256
+```
+
+表示されたHashを`.sha256`内の識別値と照合する。SHA-256はZIPの内容を照合するための値で、発行元の確認は入手したGitHubリポジトリとReleaseの対応で行う。
 
 ### vJoyの設定
 
@@ -134,4 +144,4 @@ Yawは角速度の積算による微小ドリフトがあり、HOME短押しで�
 4. USBを再接続し、回復状態の表示、値の保持、更新再開、安定までの時間を確認する。
 5. 診断が必要な区間でログを開始し、表示OFFのまま操作した後に採取を停止する。入力と処理・出力の連番、書出し件数、破棄件数、保存結果を照合する。
 
-1.0.4の入力処理回復とvJoy再取得は、例外時と取得状態が変わった時の実機確認で結果を追記する。
+1.0.5では.NET 10 Desktop Runtimeを用意して確認する。入力処理回復とvJoy再取得は、例外時と取得状態が変わった時の実機確認で結果を追記する。

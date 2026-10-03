@@ -11,7 +11,8 @@ $taskTargets = @(
     @{ Project = 'XInputReader'; App = 'XInputReader' },
     @{ Project = 'DInputReader'; App = 'DInputReader1'; Id = 1 },
     @{ Project = 'DInputReader'; App = 'DInputReader2'; Id = 2 },
-    @{ Project = 'VaderBridge'; App = 'VADERBridge' }
+    @{ Project = 'VaderBridge'; App = 'VADERBridge' },
+    @{ Project = 'VaderHidProbe'; App = 'VaderHidProbe' }
 )
 foreach ($taskTarget in $taskTargets) {
     $taskProject = $taskTarget.Project; $taskName = $taskTarget.App
@@ -25,7 +26,9 @@ foreach ($taskTarget in $taskTargets) {
 }
 $taskFiles = @($taskTargets | ForEach-Object {
     $taskApp = Join-Path $taskRoot "apps\$($_.App)"
-    foreach ($taskFile in @("$($_.App).exe", "$($_.App).dll", 'InputTools.Common.dll')) { Get-Item -LiteralPath (Join-Path $taskApp $taskFile) }
+    $taskAppFiles = @("$($_.App).exe", "$($_.App).dll")
+    if ($_.Project -ne 'VaderHidProbe') { $taskAppFiles += 'InputTools.Common.dll' }
+    foreach ($taskFile in $taskAppFiles) { Get-Item -LiteralPath (Join-Path $taskApp $taskFile) }
 })
 $taskManifest = [ordered]@{
     buildId = $BuildId
