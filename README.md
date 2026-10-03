@@ -2,9 +2,11 @@
 
 ![アプリのアイコン](src/VaderBridge/Assets/VADERBridge.png)
 
-VADER 5 PROの入力をvJoy（仮想ゲームコントローラー）へ、姿勢角度をOpenTrackへ送るWindowsアプリです。初期対象はUSB接続のVADER 5 PRO。現在の版は**1.0.5**です。
+VADER 5 PROの入力をvJoy（仮想ゲームコントローラー）へ、姿勢角度をOpenTrackへ送るWindowsアプリです。初期対象はUSB接続のVADER 5 PRO。現在の版は**1.0.6**です。
 
 本プロジェクトは、個人が開発・保守する非公式ツールです。（Flydigiの公式製品ではなく、同社との提携関係や同社による承認はありません。）
+
+**ダウンロード：[最新版のRelease](https://github.com/FuyukiYoneyama/Vader5ProInputBridge/releases/latest)**。実行用の`VADERBridge-1.0.6.zip`と、照合用の同名`.sha256`を入手してください。
 
 <img src="docs/images/vader5-pro.jpg" alt="VADER 5 Pro本体の写真" width="320">
 
