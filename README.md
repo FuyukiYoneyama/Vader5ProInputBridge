@@ -4,6 +4,8 @@
 
 VADER 5 PROの入力をvJoy（仮想ゲームコントローラー）へ、姿勢角度をOpenTrackへ送るWindowsアプリです。初期対象はUSB接続のVADER 5 PRO。現在の版は**1.0.5**です。
 
+<img src="docs/images/vader5-pro.jpg" alt="VADER 5 Pro本体の写真" width="320">
+
 ## 想定される利用例
 
 DCS（フライトシミュレーター）などで、VADER 5 ProをDirectInput（D-input：Windowsのゲームコントローラー読取り方式）の多ボタンゲームパッドとして使いながら、パッドの向きで視点を動かす使い方を想定しています。
