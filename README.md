@@ -4,6 +4,21 @@
 
 VADER 5 PROの入力をvJoy（仮想ゲームコントローラー）へ、姿勢角度をOpenTrackへ送るWindowsアプリです。初期対象はUSB接続のVADER 5 PRO。現在の版は**1.0.3**です。
 
+## 想定される利用例
+
+DCS（フライトシミュレーター）などで、VADER 5 ProをDirectInput（D-input：Windowsのゲームコントローラー読取り方式）の多ボタンゲームパッドとして使いながら、パッドの向きで視点を動かす使い方を想定しています。
+
+スティック・トリガー・20ボタンをvJoy 1からゲームへ入力し、同時にジャイロと加速度から計算した姿勢角度をOpenTrackへ送ることで、操縦操作と視点移動を併用できます。
+
+```mermaid
+flowchart LR
+    Pad["VADER 5 Pro"] --> Bridge["VADER Bridge"]
+    Bridge -->|通常入力・追加ボタン| VJoy["vJoy 1"]
+    VJoy -->|DirectInput| Game["DCSなどのゲーム"]
+    Bridge -->|姿勢角度| OpenTrack["OpenTrack"]
+    OpenTrack -->|視点移動| Game
+```
+
 ## 主な機能
 
 - 通常入力と追加ボタンをvJoy 1へ統合。20ボタン、スティック、独立トリガー、十字キーを出力。
@@ -12,6 +27,17 @@ VADER 5 PROの入力をvJoy（仮想ゲームコントローラー）へ、姿�
 - 起動後に取得と出力を自動開始し、通知領域（時計の横のアイコン欄）へ常駐。
 - 固定入力表示、表示ON／OFF、一時停止／再開、必要な区間のログ採取。
 - 接続回復中は最終値を保持し、再接続後に更新を再開。
+
+## 画面例
+
+通常入力・追加ボタン、vJoy 1へ書き込む値、OpenTrackへ送る角度を固定表示します。
+
+<details>
+<summary>Bridgeの状態画面を表示</summary>
+
+![Bridgeの状態画面：通常入力・追加ボタン・vJoy 1への出力値・OpenTrackへの送信角度](docs/images/bridge-dashboard.jpg)
+
+</details>
 
 ## 使用環境と起動
 
@@ -44,7 +70,7 @@ Windows x64、.NET 8のWindowsデスクトップ実行環境、インストー�
 |---|---|
 | `src/VaderBridge` | 取得、入力処理、vJoy出力、姿勢計算、常駐画面 |
 | `src/InputTools.Common` | 固定表示、記録、Windows入力の読取り |
-| `src/DInputReader` | DInput（Windowsのゲームコントローラー読取り方式）によるvJoyの診断 |
+| `src/DInputReader` | DirectInputによるvJoyの診断 |
 | `src/XInputReader` | XInput（Windows標準ゲームパッドの読取り方式）の診断 |
 | `src/VaderHidProbe` | HID（機器の入力・制御用インターフェース）の列挙と生入力の診断 |
 | `config` | 共有する既定設定 |

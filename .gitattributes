@@ -4,6 +4,7 @@
 *.docx binary
 *.pdf binary
 *.png binary
+*.jpg binary
 *.ico binary
 *.zip binary
 licenses/SDL-LICENSE.txt -whitespace

@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXCLUDED = {"private", "history", "logs", "apps", "artifacts", "dist", "bin", "obj", ".appdata", ".dotnet-cli", ".nuget-packages", ".vs"}
 PRIVATE_FILES = {"config/application.json", "config/measurement-id.txt"}
 PRIVATE_SUFFIXES = {".log", ".jsonl", ".docx", ".dmp", ".bundle", ".exe", ".dll", ".pdb", ".pfx", ".p12", ".pem", ".key"}
-ASSET_SUFFIXES = {".png", ".ico"}
+ASSET_SUFFIXES = {".png", ".ico", ".jpg"}
 PATTERNS = {
     "private-key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
     "github-token": re.compile(r"\b(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]{20,}\b"),
