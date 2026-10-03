@@ -4,6 +4,8 @@
 
 VADER 5 PROの入力をvJoy（仮想ゲームコントローラー）へ、姿勢角度をOpenTrackへ送るWindowsアプリです。初期対象はUSB接続のVADER 5 PRO。現在の版は**1.0.5**です。
 
+本プロジェクトは、個人が開発・保守する非公式ツールです。（Flydigiの公式製品ではなく、同社との提携関係や同社による承認はありません。）
+
 <img src="docs/images/vader5-pro.jpg" alt="VADER 5 Pro本体の写真" width="320">
 
 ## 想定される利用例
@@ -166,5 +168,7 @@ VADER側の拡張入力取得時の仕様と使用する入力経路は、[Bridg
 ## ライセンスと出典
 
 本プロジェクトのソースと文書は[MITライセンス](LICENSE)です。著作権者はFUYUKI YONEYAMA。
+
+「Flydigi」「VADER 5 Pro」などのメーカー名・製品名は、対象機器や連携先を識別するために使用しています。[VADER 5 Proの公式製品ページ](https://shops.flydigi.com/products/vader5pro)も参照できます。記載されている製品名・商標・ロゴに関する権利は、それぞれの権利者に帰属します。
 
 SDLのFlydigi実装を参照した部分は、元の著作権表示とZlibライセンスも保持しています。参照箇所・外部アプリ・配布範囲は[第三者の著作権表示](THIRD_PARTY_NOTICES.md)にまとめています。
