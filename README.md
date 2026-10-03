@@ -39,22 +39,80 @@ flowchart LR
 
 </details>
 
-## 使用環境と起動
+## 動作に必要な環境
 
-Windows x64、.NET 8のWindowsデスクトップ実行環境、インストール済みのvJoyを使用します。姿勢の利用にはOpenTrackを追加します。
+| 用意するもの | 内容・入手先 |
+|---|---|
+| PC | Windows x64（64ビット） |
+| VADER 5 Pro | USBでPCへ接続。初期対象はUSB接続 |
+| .NET 8 | **.NET Desktop Runtime（Windowsアプリの実行環境）8 / Windows x64**。[Microsoftのダウンロードページ](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)で「.NET Desktop Runtime」→「Windows」→「x64」を選ぶ |
+| vJoy | 仮想ゲームコントローラーを作るドライバー。設定画面例は2.2.2.0。[配布元のReleases](https://github.com/BrunnerInnovation/vJoy/releases) |
+| OpenTrack | Bridgeから受けた姿勢角度をゲームの視点移動へつなぐアプリ。[配布元のReleases](https://github.com/opentrack/opentrack/releases) |
 
-1. vJoy 1に20ボタン以上、X/Y/Z/Rx/Ry/Slider/Dial・Slider2、Continuous POV（角度指定の十字キー）1個を設定します。
-2. 配布用ZIPを展開し、`VADERBridge.exe`を起動します。ソースから作る場合は下のビルド手順を使用します。
-3. 初期化の案内に従い本体を約2秒静止させ、HOMEを短く押して離します。
+配布用ZIPを使う場合は上の実行環境を用意します。ソースからビルドする場合は、後述の開発環境を用意します。インストーラーがPC再起動を案内した場合は、再起動後に設定を進めます。
+
+### vJoyの役割と設定
+
+vJoyは、Windowsに仮想のゲームパッドを登録するソフトです。BridgeがVADERの入力を書き込み、ゲームはそのvJoyをDirectInputのゲームパッドとして読み取ります。現在の構成では**Device 1に通常入力と追加ボタンをまとめます**。
+
+1. vJoyをインストールし、Bridgeを終了した状態でvJoyConf（vJoyの機器設定ツール）を開きます。
+2. 上部の「1」を選び、次の表のとおり設定します。
+3. 左下の「Enable vJoy」をONにし、「Apply」で保存して画面を閉じます。
+
+| 項目 | 設定 |
+|---|---|
+| Axes（軸） | X、Y、Z、Rx、Ry、Slider、Dial/Slider2をON |
+| Number of Buttons（ボタン数） | 20 |
+| POV Hat Switch（十字キーの方向入力） | Continuous（角度指定）を選び、POVsを1 |
+| Rz | OFF。有効な場合は中央を保持 |
+| Force Feedback（振動・力覚のフィードバック） | 入力設定とは独立。画面例のEnable EffectsはON |
+
+（このBridgeはゲームからの振動・力覚をVADERへ中継しません。）vJoy 2への出力は既定でOFFです。
+
+<details>
+<summary>vJoyの設定画面例（2.2.2.0）</summary>
+
+![vJoyConf：Device 1、7軸、20ボタン、Continuous POV 1個の設定](docs/images/vjoy-device1-settings.jpg)
+
+</details>
+
+### OpenTrackの設定
+
+OpenTrackの入力を、Bridgeが送るUDP（アプリ間でデータを送る通信方式）に合わせます。次の表は添付画面と同じ設定例です。
+
+| 項目 | 設定 |
+|---|---|
+| Input（入力方式） | **UDP over network** |
+| Input横の工具ボタン → Port（受信ポート） | **4242**。Bridgeの既定送信先は同じPCの`127.0.0.1:4242` |
+| Add to axis（受信角度へ加える補正） | yaw、pitch、rollをすべて**0** |
+| Output（ゲームへの出力方式） | 使用するゲームに合わせる。画面例は**freetrack 2.0 Enhanced** |
+| Filter（動きを滑らかにする処理） | 画面例は**Accela**。操作感に合わせて調整 |
+
+「Start」で追跡を開始します。パッドを動かして「Raw tracker data（受信した姿勢角度）」が変化し、「Game data（ゲームへ送る値）」にも反映されることを確認します。視点の動く量は「Mapping（入力角度とゲーム内の視点角度の対応）」で調整できます。[OpenTrackの公式設定ガイド](https://github.com/opentrack/opentrack/wiki/Quick-Start-Guide-(WIP))も参照できます。
+
+<details>
+<summary>OpenTrackの設定画面例（2023.3.0）</summary>
+
+![OpenTrack：UDP over network、freetrack 2.0 Enhanced、Accelaの設定](docs/images/opentrack-main-settings.jpg)
+
+![UDP入力の設定：Port 4242、yaw・pitch・rollへの追加角度0](docs/images/opentrack-udp-settings.jpg)
+
+</details>
+
+### Bridgeを起動して使う
+
+1. 配布用ZIPを展開し、`VADERBridge.exe`を起動します。
+2. 初期化の案内に従い本体を約2秒静止させ、HOMEを短く押して離します。
+3. ゲーム側でvJoy 1のボタン・軸を割り当て、OpenTrackの追跡を開始して使用します。
 4. 通知領域のアイコンをダブルクリックすると状態画面が開きます。終了はアイコンメニューの「終了」を使用します。
 
-ログの初期値はOFFです。OpenTrack側は入力を「UDP over network」、ポートを4242にして追跡を開始します。
+ログの初期値はOFFです。
 
 [利用ガイドと割当](docs/USAGE.md) · [変更履歴](CHANGELOG.md)
 
 ## ビルド
 
-.NET 8 SDK、Git、PowerShell 7を用意し、リポジトリ直下で実行します。
+.NET 8 SDK（ソースをビルドする開発キット）、Git、PowerShell 7を用意し、リポジトリ直下で実行します。
 
 ```powershell
 .\build-apps.ps1

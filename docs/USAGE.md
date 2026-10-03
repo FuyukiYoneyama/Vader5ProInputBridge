@@ -2,17 +2,40 @@
 
 ## 準備
 
-Windows x64、.NET 8のWindowsデスクトップ実行環境、vJoy（仮想ゲームコントローラー）を用意する。初期対象はUSB接続のVADER 5 PRO。姿勢の利用にはOpenTrackを追加する。
+| 用意するもの | 内容・入手先 |
+|---|---|
+| PCとパッド | Windows x64（64ビット）と、USB接続のVADER 5 PRO |
+| .NET 8 | .NET Desktop Runtime（Windowsアプリの実行環境）8のWindows x64版。[Microsoftのダウンロードページ](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)で「.NET Desktop Runtime」→「Windows」→「x64」を選ぶ |
+| vJoy（仮想ゲームコントローラー） | [配布元のReleases](https://github.com/BrunnerInnovation/vJoy/releases)。設定画面例は2.2.2.0 |
+| OpenTrack | 姿勢をゲームの視点移動へ使う場合に用意する。[配布元のReleases](https://github.com/opentrack/opentrack/releases) |
 
-vJoyConfのDevice 1を次の構成にしてApplyを押す。
+配布用ZIPを使う場合は、この実行環境を用意する。インストーラーがPC再起動を案内した場合は、再起動後に設定を進める。
+
+### vJoyの設定
+
+vJoyはWindowsに仮想のゲームパッドを登録するドライバー。BridgeがVADERの入力をvJoyへ書き込み、ゲームがDirectInput（Windowsのゲームコントローラー読取り方式）で読み取る。通常入力と追加ボタンの出力先はDevice 1。
+
+1. vJoyをインストールする。
+2. Bridgeを終了した状態でvJoyConf（vJoyの機器設定ツール）を開く。
+3. 上部の「1」を選び、次の構成にする。
+4. 左下の「Enable vJoy」をONにして「Apply」を押し、画面を閉じる。
 
 | 項目 | 設定 |
 |---|---|
 | 軸 | X、Y、Z、Rx、Ry、Slider、Dial/Slider2 |
 | Number of Buttons | 20以上 |
 | POV（十字キーの方向入力） | Continuous（角度指定）1個 |
-| Rz | 有効な場合は中央を保持 |
-| Enable Effects（振動・力覚入力） | 入力割当と独立した設定 |
+| Rz | OFF。有効な場合は中央を保持 |
+| Enable Effects | Force Feedback（振動・力覚のフィードバック）用。入力割当と独立した設定。画面例ではON |
+
+（このBridgeはゲームからの振動・力覚をVADERへ中継しない。）vJoy 2への出力は既定でOFF。
+
+<details>
+<summary>vJoyの設定画面例（2.2.2.0）</summary>
+
+![vJoyConf：Device 1、7軸、20ボタン、Continuous POV 1個](images/vjoy-device1-settings.jpg)
+
+</details>
 
 ## 起動と常駐
 
@@ -51,9 +74,31 @@ ZIPをフォルダーへ展開し、`VADERBridge.exe`を起動する。ソース
 
 ## OpenTrack
 
-1. OpenTrackの入力を「UDP over network」、ポートを4242にして追跡を開始する。
-2. Bridgeの初期化後、HOMEを短く押して離す。
-3. Bridgeの送信角度とOpenTrackの「Raw tracker data」で値を確認する。
+Bridgeから受けた姿勢角度を、OpenTrackがゲームの視点移動へ変換する。入力設定はUDP（アプリ間でデータを送る通信方式）を使う。
+
+| 項目 | 設定 |
+|---|---|
+| Input（入力方式） | UDP over network |
+| Input横の工具ボタン → Port（受信ポート） | 4242。Bridgeの既定送信先は同じPCの`127.0.0.1:4242` |
+| Add to axis（受信角度へ加える補正） | yaw、pitch、rollをすべて0 |
+| Output（ゲームへの出力方式） | 使用するゲームに合わせる。画面例はfreetrack 2.0 Enhanced |
+| Filter（動きを滑らかにする処理） | 画面例はAccela。操作感に合わせて調整 |
+
+1. 上の項目を設定し、「Start」で追跡を開始する。
+2. Bridgeの初期化後、使用する持ち方でHOMEを短く押して離す。
+3. パッドを動かし、Bridgeの送信角度と「Raw tracker data（受信した姿勢角度）」の変化を確認する。
+4. 「Game data（ゲームへ送る値）」にも反映され、ゲームの視点が動くことを確認する。
+
+視点の動く量は「Mapping（入力角度とゲーム内の視点角度の対応）」で調整する。詳しい設定は[OpenTrackの公式設定ガイド](https://github.com/opentrack/opentrack/wiki/Quick-Start-Guide-(WIP))を参照する。
+
+<details>
+<summary>OpenTrackの設定画面例（2023.3.0）</summary>
+
+![OpenTrack：UDP over network、freetrack 2.0 Enhanced、Accela](images/opentrack-main-settings.jpg)
+
+![UDP入力：Port 4242、yaw・pitch・rollへの追加角度0](images/opentrack-udp-settings.jpg)
+
+</details>
 
 Yaw（左右へ向きを変える回転）はジャイロ角速度の積分、Pitch（前後の傾き）とRoll（左右の傾き）はジャイロと重力方向による計算を使用する。停止した位置を保持し、HOME短押しの解放で正面を更新する。既定の短押しは600 ms未満。（HOME長押しには追加処理を割り当てない。）
 
