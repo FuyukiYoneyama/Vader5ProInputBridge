@@ -22,7 +22,7 @@ SDLの元実装と本実装を区別し、元の表示を参照ファイルの�
 | Windows API | HID、DInput、XInput、ウィンドウ操作 | Windows SDKの関数宣言とデータ配置に従うC#相互運用実装 |
 | Pillow | アイコン生成時に使用するPythonライブラリ | [Pillow](https://github.com/python-pillow/Pillow)。開発用として別途用意 |
 
-vJoyのAPI（プログラムから使う関数）と取得・解除処理の参照元は[BrunnerInnovation/vJoyのvJoyInterface.cpp](https://github.com/BrunnerInnovation/vJoy/blob/master/apps/common/vJoyInterface/vJoyInterface.cpp)。元プロジェクトは[jshafer817/vJoy](https://github.com/jshafer817/vJoy)で、利用者向けの配布先と実装の参照先を上記で区別している。
+vJoyのAPI（プログラムから使う関数）と取得・解除処理の参照元は[BrunnerInnovation/vJoyのvJoyInterface.cpp](https://github.com/BrunnerInnovation/vJoy/blob/master/apps/common/vJoyInterface/vJoyInterface.cpp)。利用者向けの配布先と実装の参照先を上記で区別している。
 
 OpenTrackへ送るデータの軸順序と形式は、[公式UDP受信処理](https://github.com/opentrack/opentrack/blob/master/tracker-udp/ftnoir_tracker_udp.cpp)を参照して実装している。
 
