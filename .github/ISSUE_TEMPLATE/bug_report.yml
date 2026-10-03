@@ -1,0 +1,29 @@
+name: 不具合の報告
+description: 接続方式と操作手順をまとめます。
+title: "[不具合] "
+body:
+  - type: input
+    id: version
+    attributes:
+      label: アプリ版
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 動作環境
+      description: Windows、vJoy、ファームウェアの版、USB有線またはドングル、同時に使用した設定アプリ。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順と結果
+      description: 操作の順番、期待する結果、実際の状態、Bridgeと読取り側で確認した値。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 記録
+      description: 必要な項目や短い記録を添付できます。共有する内容のアカウント名・パス・機器識別子を確認してください。

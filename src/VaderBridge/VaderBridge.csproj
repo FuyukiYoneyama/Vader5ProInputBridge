@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>VADERBridge</AssemblyName>
+    <PlatformTarget>x64</PlatformTarget>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>Assets\VADERBridge.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../InputTools.Common/InputTools.Common.csproj" />
+    <EmbeddedResource Include="Assets\*.ico" LogicalName="VADERBridge.Icons.%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,76 @@
+{
+  "runtime": {
+    "vjoyLibraryPath": ""
+  },
+  "device": {
+    "vid": "0x37D7",
+    "pid": "0x2401",
+    "connection": "usb"
+  },
+  "vjoyId": 2,
+  "extendedEnabled": false,
+  "standard": {
+    "enabled": true,
+    "vjoyId": 1,
+    "stickDeadzone": 0.0,
+    "buttons": {
+      "A": 1, "B": 2, "X": 3, "Y": 4, "LB": 5, "RB": 6, "Back": 7, "Start": 8, "LS": 9, "RS": 10,
+      "M1": 11, "M2": 12, "M3": 13, "M4": 14, "LM": 15, "RM": 16, "C": 17, "Z": 18, "Fn": 19, "Guide": 20
+    }
+  },
+  "buttons": {
+    "M1": 1,
+    "M2": 2,
+    "M3": 3,
+    "M4": 4,
+    "LM": 5,
+    "RM": 6,
+    "C": 7,
+    "Z": 8,
+    "Fn": 9,
+    "Guide": 10
+  },
+  "gyro": {
+    "fullScaleRadiansPerSecond": 4.0,
+    "x": { "axis": "Rx", "invert": false, "gain": 1.0, "deadzone": 0.02, "centerOffset": 0.0, "smoothing": 0.0 },
+    "y": { "axis": "Ry", "invert": false, "gain": 1.0, "deadzone": 0.02, "centerOffset": 0.0, "smoothing": 0.0 },
+    "z": { "axis": "Rz", "invert": false, "gain": 1.0, "deadzone": 0.02, "centerOffset": 0.0, "smoothing": 0.0 }
+  },
+  "accel": {
+    "fullScaleMetersPerSecondSquared": 20.0
+  },
+  "yaw": {
+    "yawRangeDeg": 90.0,
+    "sensorAxis": "Y",
+    "invert": true,
+    "biasCalibrationSeconds": 2.0,
+    "minimumBiasSamples": 200,
+    "stationaryMaxRateDegPerSecond": 3.0,
+    "stationaryStdDevDegPerSecond": 0.35,
+    "stationaryGravityTolerance": 1.5,
+    "stationaryAccelChangeTolerance": 0.35,
+    "homeShortPressMilliseconds": 600.0,
+    "maxSampleGapSeconds": 0.25
+  },
+  "openTrack": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 4242,
+    "sendHz": 100,
+    "smoothingMilliseconds": 30.0,
+    "yawGain": 1.0,
+    "pitchGain": 1.0,
+    "rollGain": 1.0,
+    "invertYaw": false,
+    "invertPitch": false,
+    "invertRoll": false,
+    "yawLimitDeg": 180.0,
+    "pitchLimitDeg": 89.0,
+    "rollLimitDeg": 89.0
+  },
+  "tilt": {
+    "fullScaleDegrees": 45.0,
+    "correctionTimeConstantSeconds": 0.4,
+    "pitch": { "axis": "Slider2", "invert": false, "gain": 1.0, "deadzone": 0.01, "centerOffset": 0.0, "smoothing": 0.05 }
+  }
+}

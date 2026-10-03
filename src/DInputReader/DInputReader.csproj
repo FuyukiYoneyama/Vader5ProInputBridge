@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName Condition="'$(DInputVJoyId)' == ''">DInputReader</AssemblyName>
+    <AssemblyName Condition="'$(DInputVJoyId)' != ''">DInputReader$(DInputVJoyId)</AssemblyName>
+    <DefineConstants Condition="'$(DInputVJoyId)' == '1'">$(DefineConstants);VJOY_ONE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../InputTools.Common/InputTools.Common.csproj" /></ItemGroup>
+</Project>

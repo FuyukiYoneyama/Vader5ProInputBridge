@@ -1,0 +1,9 @@
+* text=auto eol=lf
+*.dll binary
+*.exe binary
+*.docx binary
+*.pdf binary
+*.png binary
+*.ico binary
+*.zip binary
+licenses/SDL-LICENSE.txt -whitespace
