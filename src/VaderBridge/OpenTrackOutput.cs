@@ -16,6 +16,7 @@ internal sealed class OpenTrackOutput : IAsyncDisposable
     private readonly IPEndPoint _endpoint;
     private readonly object _sync = new();
     private readonly CancellationTokenSource _cancel = new();
+    private readonly SemaphoreSlim _recenterSignal = new(0, 1);
     private readonly Task _sender;
     private Pose _desired = new(0, 0, 0), _sentPose = new(0, 0, 0);
     private bool _enabled, _inputActive, _biasReady, _haveCenter;
@@ -77,6 +78,7 @@ internal sealed class OpenTrackOutput : IAsyncDisposable
             _desired = new(ConvertAngle(yaw.AngleDeg, _config.YawGain, _config.InvertYaw, _config.YawLimitDeg),
                     ConvertAngle(AngleDifference(pitch - _pitchCenter), _config.PitchGain, _config.InvertPitch, _config.PitchLimitDeg),
                     ConvertAngle(AngleDifference(roll - _rollCenter), _config.RollGain, _config.InvertRoll, _config.RollLimitDeg));
+            if (yaw.Recentered && _recenterSignal.CurrentCount == 0) _recenterSignal.Release();
         }
     }
 
@@ -97,64 +99,71 @@ internal sealed class OpenTrackOutput : IAsyncDisposable
 
     private async Task SendAsync()
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1d / _config.SendHz));
+        long intervalTicks = Math.Max(1, (long)(Stopwatch.Frequency / (double)_config.SendHz));
+        long nextTick = Stopwatch.GetTimestamp() + intervalTicks;
         UdpClient? socket = null;
         long lastTick = 0, version = -1, sentRecenter = 0, nextRetry = 0, nextLog = 0;
         Pose filtered = new(0, 0, 0);
         Pose? logged = null;
         try
         {
-            while (await timer.WaitForNextTickAsync(_cancel.Token).ConfigureAwait(false))
+            while (true)
             {
+                TimeSpan wait = TimeSpan.FromMilliseconds(Math.Ceiling(Math.Max(0, nextTick - Stopwatch.GetTimestamp()) * 1000d / Stopwatch.Frequency));
+                bool recenterRequested = await _recenterSignal.WaitAsync(wait, _cancel.Token).ConfigureAwait(false);
                 long now = Stopwatch.GetTimestamp();
+                if (now >= nextTick) nextTick = now + intervalTicks;
                 double dt = lastTick == 0 ? 0 : (now - lastTick) / (double)Stopwatch.Frequency;
                 lastTick = now;
-                Pose desired; long resetVersion, recenterVersion; bool enabled, active, biasReady;
+                // Select, send, and commit under the same lock as recentering so an old pose cannot follow a reset.
                 lock (_sync)
                 {
-                    enabled = _enabled; active = _inputActive; biasReady = _biasReady;
-                    desired = _desired; resetVersion = _resetVersion; recenterVersion = _recenterVersion;
-                }
-                if (!enabled || !active) { socket?.Dispose(); socket = null; version = -1; continue; }
-                if (now < nextRetry) continue;
-                bool recenter = recenterVersion != sentRecenter;
-                if (recenter) { filtered = new(0, 0, 0); version = resetVersion; }
-                else if (version != resetVersion) { filtered = desired; version = resetVersion; }
-                else
-                {
-                    double alpha = _config.SmoothingMilliseconds == 0 ? 1
-                        : 1 - Math.Exp(-dt * 1000 / _config.SmoothingMilliseconds);
-                    filtered = new(filtered.Yaw + alpha * (desired.Yaw - filtered.Yaw),
-                        filtered.Pitch + alpha * (desired.Pitch - filtered.Pitch),
-                        filtered.Roll + alpha * (desired.Roll - filtered.Roll));
-                }
-                try
-                {
-                    socket ??= new UdpClient(AddressFamily.InterNetwork);
-                    byte[] packet = Encode(filtered);
-                    int bytes = await socket.SendAsync(packet, _endpoint, _cancel.Token).ConfigureAwait(false);
-                    if (bytes != packet.Length) throw new IOException($"OpenTrack送信サイズ: {bytes}/48");
-                    long sent; bool recovered;
-                    lock (_sync)
+                    if (!_enabled || !_inputActive) { socket?.Dispose(); socket = null; version = -1; continue; }
+                    if (now < nextRetry && !recenterRequested) continue;
+                    bool recenter = _recenterVersion != sentRecenter;
+                    if (recenter) { filtered = new(0, 0, 0); version = _resetVersion; }
+                    else if (version != _resetVersion) { filtered = _desired; version = _resetVersion; }
+                    else
                     {
-                        sent = ++_sent; _sentPose = filtered; recovered = _error.Length > 0; _error = "";
+                        double alpha = _config.SmoothingMilliseconds == 0 ? 1
+                            : 1 - Math.Exp(-dt * 1000 / _config.SmoothingMilliseconds);
+                        filtered = new(filtered.Yaw + alpha * (_desired.Yaw - filtered.Yaw),
+                            filtered.Pitch + alpha * (_desired.Pitch - filtered.Pitch),
+                            filtered.Roll + alpha * (_desired.Roll - filtered.Roll));
                     }
-                    sentRecenter = recenterVersion;
-                    if (recovered) _log.Write("opentrack-recovered", new { target = _endpoint.ToString(), sent });
-                    // Log angle changes at 0.01 degrees and a one-second heartbeat.
-                    if (recenter || logged is null || Math.Abs(filtered.Yaw - logged.Yaw) >= .01
-                        || Math.Abs(filtered.Pitch - logged.Pitch) >= .01 || Math.Abs(filtered.Roll - logged.Roll) >= .01 || now >= nextLog)
+                    try
                     {
-                        logged = filtered; nextLog = now + Stopwatch.Frequency;
-                        _log.Write("opentrack-send", new { target = _endpoint.ToString(), sent, bytes, position = new double[3], angles = filtered, biasReady, recenter }, now);
+                        if (socket is null)
+                        {
+                            socket = new UdpClient(AddressFamily.InterNetwork);
+                            // A 48-byte loopback send must not block the input thread waiting for this lock.
+                            socket.Client.Blocking = false;
+                        }
+                        byte[] packet = Encode(filtered);
+                        int bytes = socket.Send(packet, packet.Length, _endpoint);
+                        if (bytes != packet.Length) throw new IOException($"OpenTrack送信サイズ: {bytes}/48");
+                        long sent = ++_sent;
+                        _sentPose = filtered;
+                        bool recovered = _error.Length > 0;
+                        _error = "";
+                        sentRecenter = _recenterVersion;
+                        nextRetry = 0;
+                        if (recovered) _log.Write("opentrack-recovered", new { target = _endpoint.ToString(), sent });
+                        // Log angle changes at 0.01 degrees and a one-second heartbeat.
+                        if (recenter || logged is null || Math.Abs(filtered.Yaw - logged.Yaw) >= .01
+                            || Math.Abs(filtered.Pitch - logged.Pitch) >= .01 || Math.Abs(filtered.Roll - logged.Roll) >= .01 || now >= nextLog)
+                        {
+                            logged = filtered; nextLog = now + Stopwatch.Frequency;
+                            _log.Write("opentrack-send", new { target = _endpoint.ToString(), sent, bytes, position = new double[3], angles = filtered, biasReady = _biasReady, recenter }, now);
+                        }
                     }
-                }
-                catch (Exception ex) when (ex is SocketException or IOException or ObjectDisposedException)
-                {
-                    long errors;
-                    lock (_sync) { errors = ++_errors; _error = ex.Message; }
-                    socket?.Dispose(); socket = null; nextRetry = now + Stopwatch.Frequency;
-                    _log.Write("opentrack-send-error", new { error = ex.ToString(), errors, retrySeconds = 1 });
+                    catch (Exception ex) when (ex is SocketException or IOException or ObjectDisposedException)
+                    {
+                        long errors = ++_errors;
+                        _error = ex.Message;
+                        socket?.Dispose(); socket = null; nextRetry = now + Stopwatch.Frequency;
+                        _log.Write("opentrack-send-error", new { error = ex.ToString(), errors, retrySeconds = 1 });
+                    }
                 }
             }
         }
@@ -164,7 +173,7 @@ internal sealed class OpenTrackOutput : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        _cancel.Cancel(); await _sender.ConfigureAwait(false); _cancel.Dispose();
+        _cancel.Cancel(); await _sender.ConfigureAwait(false); _recenterSignal.Dispose(); _cancel.Dispose();
         _log.Write("opentrack-closed", new { sent = _sent, errors = _errors });
     }
 }

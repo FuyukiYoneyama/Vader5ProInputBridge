@@ -16,7 +16,7 @@
 （配布EXEにはAuthenticode（Windowsで発行元を確認するコード署名）を付けていない。）Windows SmartScreen（ダウンロードしたアプリの評判を確認する機能）が警告を表示する場合がある。[Microsoftの説明](https://learn.microsoft.com/en-us/windows/security/operating-system-security/virus-and-threat-protection/microsoft-defender-smartscreen/)を参照する。GitHubのReleaseからZIPと同名の`.sha256`を入手し、展開前にファイルのSHA-256（ファイル内容の識別値）を照合する。
 
 ```powershell
-Get-FileHash .\VADERBridge-1.0.6.zip -Algorithm SHA256
+Get-FileHash .\VADERBridge-1.0.7.zip -Algorithm SHA256
 ```
 
 表示されたHashを`.sha256`内の識別値と照合する。SHA-256はZIPの内容を照合するための値で、発行元の確認は入手したGitHubリポジトリとReleaseの対応で行う。
@@ -116,6 +116,8 @@ Bridgeから受けた姿勢角度を、OpenTrackがゲームの視点移動へ�
 
 Yaw（左右へ向きを変える回転）はジャイロ角速度の積分、Pitch（前後の傾き）とRoll（左右の傾き）はジャイロと重力方向による計算を使用する。停止した位置を保持し、HOME短押しの解放で正面を更新する。既定の短押しは600 ms未満。（HOME長押しには追加処理を割り当てない。）
 
+正面の更新時は、Bridgeの平滑化履歴をクリアし、送信周期を待たずにOpenTrackへYaw/Pitch/Rollがすべて0°の値を優先して送る。送信に失敗した場合も、0°の送信が成功するまでリセット要求を保持する。その後は更新した正面からの姿勢変化を送る。
+
 初期値は100回/秒の送信、30 msの平滑化、Yaw±180°、Pitch/Roll±89°。角度上限では端の値に飽和し、逆方向の回転で戻る。
 
 設定画面のOpenTrack同時起動はEXEを起動する機能。入力方式と追跡開始はOpenTrack側で設定する。
@@ -148,4 +150,4 @@ Yawは角速度の積算による微小ドリフトがあり、HOME短押しで�
 4. USBを再接続し、回復状態の表示、値の保持、更新再開、安定までの時間を確認する。
 5. 診断が必要な区間でログを開始し、表示OFFのまま操作した後に採取を停止する。入力と処理・出力の連番、書出し件数、破棄件数、保存結果を照合する。
 
-1.0.6では.NET 10 Desktop Runtimeを用意して確認する。入力処理回復とvJoy再取得は、例外時と取得状態が変わった時の実機確認で結果を追記する。
+1.0.7では.NET 10 Desktop Runtimeを用意して確認する。HOME短押しの解放時にOpenTrackへ0°の値が送られることを確認する。入力処理回復とvJoy再取得は、例外時と取得状態が変わった時の実機確認で結果を追記する。
